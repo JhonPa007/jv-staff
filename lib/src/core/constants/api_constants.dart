@@ -9,10 +9,10 @@ class ApiConstants {
   //static const String baseUrl = 'http://10.0.2.2:8000';
 
  // OPCIÓN B: Para CHROME / WEB
-  static const String baseUrl = 'http://localhost:8000';
+ // static const String baseUrl = 'http://localhost:8000';
 
   // OPCIÓN C: Para PRODUCCIÓN (Railway - A futuro)
-  // static const String baseUrl = 'https://tu-proyecto-railway.up.railway.app';
+  static const String baseUrl = 'https://staff.jvcorp.pe/';
 
   // ---------------------------------------------------------------------------
   // ENDPOINTS
