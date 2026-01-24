@@ -11,8 +11,9 @@ class ApiConstants {
  // OPCIÓN B: Para CHROME / WEB
  // static const String baseUrl = 'http://localhost:8000';
 
-  // OPCIÓN C: Para PRODUCCIÓN (Railway - A futuro)
-  static const String baseUrl = 'https://staff.jvcorp.pe/';
+  // ✅ BIEN (Apunta al Backend Python)
+static const String baseUrl = 'https://jv-staff-production.up.railway.app'; 
+// (Asegúrate de pegar TU URL del servicio 'jv-staff', sin la barra al final si es posible)
 
   // ---------------------------------------------------------------------------
   // ENDPOINTS
