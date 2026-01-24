@@ -1,8 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-
-# --- ⚠️ AQUÍ ESTABA EL ERROR: FALTABAN ESTOS IMPORTS ---
-from app.routers import auth, staff, appointments 
+from app.routers import auth, staff, appointments
 
 app = FastAPI()
 
@@ -31,4 +29,3 @@ app.include_router(appointments.router)
 @app.get("/")
 def root():
     return {"message": "BarberStaff API is Online 🚀"}
-    
