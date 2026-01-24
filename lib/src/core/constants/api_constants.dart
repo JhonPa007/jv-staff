@@ -5,8 +5,8 @@ class ApiConstants {
   
   // URL del Backend en Railway (Producción)
   // NOTA: No lleva barra '/' al final.
-  //static const String baseUrl = 'https://jv-staff-production.up.railway.app';
-  static const String baseUrl = 'https://staff.jvcorp.com';
+  static const String baseUrl = 'https://jv-staff-production.up.railway.app';
+  //static const String baseUrl = 'https://staff.jvcorp.com';
 
   // ---------------------------------------------------------------------------
   // ENDPOINTS
