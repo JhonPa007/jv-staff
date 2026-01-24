@@ -31,3 +31,4 @@ app.include_router(appointments.router)
 @app.get("/")
 def root():
     return {"message": "BarberStaff API is Online 🚀"}
+    
