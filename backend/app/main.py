@@ -1,6 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-# ... tus otros imports ...
+
+# --- ⚠️ AQUÍ ESTABA EL ERROR: FALTABAN ESTOS IMPORTS ---
+from app.routers import auth, staff, appointments 
 
 app = FastAPI()
 
@@ -8,21 +10,22 @@ app = FastAPI()
 origins = [
     "http://localhost:3000",
     "http://localhost:8000",
-    "https://staff.jvcorp.pe",  # <--- ¡TU DOMINIO DEL FRONTEND!
-    "*" # Comodín (Permite todo, útil para pruebas)
+    "https://staff.jvcorp.pe",  # Tu Frontend
+    "*" 
 ]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins, # Aquí autorizamos a tu App
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # --- Conectamos las rutas al servidor ---
+# Ahora sí funcionará porque ya los importamos arriba
 app.include_router(auth.router)
-app.include_router(staff.router)        # Ahora sí funcionará porque staff está importado arriba
+app.include_router(staff.router)       
 app.include_router(appointments.router)
 
 @app.get("/")
