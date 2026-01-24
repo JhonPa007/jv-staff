@@ -17,6 +17,8 @@ origins = [
     "http://localhost:3000",
     "http://localhost:8000",
     "https://staff.jvcorp.pe",
+    "https://jv-staff-production.up.railway.app", # (Opcional)
+    "https://celebrated-analysis-production.up.railway.app", # <--- NUEVO FRONTEND
     "*" 
 ]
 
