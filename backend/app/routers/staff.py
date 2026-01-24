@@ -6,7 +6,7 @@ router = APIRouter(prefix="/staff", tags=["Staff"])
 @router.get("/dashboard")
 def get_dashboard():
     return {
-        "period": "Enero 2024",
+        "period": "Enero 2026",
         "metrics": {
             "total_production": db.total_production,
             "total_commission_pending": db.pending_commission,
