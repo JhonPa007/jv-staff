@@ -1,15 +1,20 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-
-# --- AQUÍ ESTABA EL ERROR: Importamos explícitamente los 3 módulos ---
-from app.routers import auth, staff, appointments 
+# ... tus otros imports ...
 
 app = FastAPI()
 
-# Configuración de CORS (Crucial para que Chrome no bloquee la app)
+# --- CONFIGURACIÓN DE SEGURIDAD (CORS) ---
+origins = [
+    "http://localhost:3000",
+    "http://localhost:8000",
+    "https://staff.jvcorp.pe",  # <--- ¡TU DOMINIO DEL FRONTEND!
+    "*" # Comodín (Permite todo, útil para pruebas)
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # En producción esto se cambia, pero en dev usamos *
+    allow_origins=origins, # Aquí autorizamos a tu App
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
