@@ -69,7 +69,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       ),
       body: state.when(
         loading: () => const Center(child: CircularProgressIndicator(color: Color(0xFFD4AF37))),
-        error: (err, stack) => Center(child: Text("Error: \$err", style: const TextStyle(color: Colors.red))),
+        error: (err, stack) => Center(child: Text("Error: $err", style: const TextStyle(color: Colors.red))),
         data: (data) => SingleChildScrollView(
           padding: const EdgeInsets.all(20),
           child: Column(
