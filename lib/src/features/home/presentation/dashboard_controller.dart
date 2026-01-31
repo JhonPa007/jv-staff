@@ -13,9 +13,12 @@ class DashboardController extends _$DashboardController {
     final result = await repository.getDashboardData();
     
     return result.fold(
-      (error) => throw error, // Riverpod's AsyncValue handles exceptions
+      (error) {
+         print('📲 CONTROLLER ERROR: \$error');
+         throw error;
+      }, 
       (response) {
-        print("✅ CONTROLLER: Datos recibidos del Backend: \$response");
+        print('📲 CONTROLLER RECIBIÓ: \${response.userName}');
         return response;
       },
     );
