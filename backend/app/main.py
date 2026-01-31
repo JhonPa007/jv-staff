@@ -1,52 +1,49 @@
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-import sys
+from fastapi.staticfiles import StaticFiles
+# 1. IMPORTANTE: Importamos el manejador de CORS
+from fastapi.middleware.cors import CORSMiddleware 
+import os
 
-# --- IMPORTS DE RUTAS ---
-# Vamos a usar un try/except para saber si aquí está fallando la importación
-try:
-    from app.routers import auth, staff, appointments
-    print("✅ Módulos de rutas importados correctamente")
-except ImportError as e:
-    print(f"❌ ERROR CRÍTICO IMPORTANDO RUTAS: {e}")
+from app.routers import auth, staff, appointments
+from app.database import Base, engine
 
-app = FastAPI()
+# Crear tablas al inicio
+Base.metadata.create_all(bind=engine)
 
-# --- CONFIGURACIÓN DE SEGURIDAD (CORS) ---
+app = FastAPI(
+    title="BarberStaff API",
+    description="API para gestión de staff de barbería",
+    version="1.0.0"
+)
+
+# --------------------------------------------------------------------------
+# 2. CONFIGURACIÓN DE CORS (El "Portero")
+# --------------------------------------------------------------------------
+# Esto permite que tu Frontend (Flutter Web) hable con este Backend
 origins = [
-    "http://localhost:3000",
-    "http://localhost:8000",
-    "https://staff.jvcorp.pe",
-    "https://jv-staff-production.up.railway.app", # (Opcional)
-    "https://celebrated-analysis-production.up.railway.app", # <--- NUEVO FRONTEND
-    "*" 
+    "*", # ⚠️ POR AHORA: Permitimos a TODOS (para que funcione ya)
+    # En el futuro, pondremos aquí solo tu dominio:
+    # "https://celebrated-analysis-production.up.railway.app",
 ]
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["*"], # Permitir GET, POST, PUT, DELETE
+    allow_headers=["*"], # Permitir enviar Tokens de Auth
 )
+# --------------------------------------------------------------------------
 
-# --- ARCHIVOS ESTÁTICOS (Para ver las evidencias) ---
-from fastapi.staticfiles import StaticFiles
-import os
-if not os.path.exists("uploads"):
-    os.makedirs("uploads")
-app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+# Montar carpeta para imágenes (Evidencias)
+os.makedirs("uploads", exist_ok=True)
+app.mount("/static", StaticFiles(directory="uploads"), name="static")
 
-
-# --- CONEXIÓN DE RUTAS ---
-# Usamos verificaciones para que no explote de golpe si falla el import
-if 'auth' in locals():
-    app.include_router(auth.router)
-if 'staff' in locals():
-    app.include_router(staff.router)       
-if 'appointments' in locals():
-    app.include_router(appointments.router)
+# Registrar Rutas
+app.include_router(auth.router)
+app.include_router(staff.router)
+app.include_router(appointments.router)
 
 @app.get("/")
-def root():
-    return {"message": "BarberStaff API is Online 🚀"}
+def read_root():
+    return {"message": "Sistema BarberStaff Online 🚀"}
