@@ -67,94 +67,111 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           )
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Saludo
-            const Text(
-              "Hola, Juan",
-              style: TextStyle(color: Color(0xFFD4AF37), fontSize: 24, fontWeight: FontWeight.bold),
-            ),
-            const Text(
-              "Bienvenido de nuevo",
-              style: TextStyle(color: Colors.grey, fontSize: 16),
-            ),
-            const SizedBox(height: 30),
-
-            // Métricas
-            const Text("Mis Métricas (Enero 2024)", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 15),
-            Row(
-              children: [
-                Expanded(child: _buildMetricCard("Producción", "\$1500", true)),
-                const SizedBox(width: 15),
-                Expanded(child: _buildMetricCard("Comisión Pendiente", "\$120", false)),
-              ],
-            ),
-            const SizedBox(height: 30),
-
-            // Próxima Cita (SECCIÓN INTERACTIVA)
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text("Próxima Cita", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-                TextButton(
-                  onPressed: () {}, 
-                  child: const Text("Ver Todo", style: TextStyle(color: Color(0xFFD4AF37)))
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-
-            // TARJETA CLICKEABLE
-            GestureDetector(
-              onTap: _navigateToAppointmentDetail, // <--- AQUÍ ESTÁ LA MAGIA
-              child: Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1E1E1E),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.white10),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 4,
-                      height: 50,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFD4AF37),
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                    const SizedBox(width: 15),
-                    const Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            "14:30",
-                            style: TextStyle(color: Color(0xFFD4AF37), fontWeight: FontWeight.bold),
-                          ),
-                          SizedBox(height: 4),
-                          Text(
-                            "Carlos Perez",
-                            style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-                          ),
-                          Text(
-                            "Corte + Barba",
-                            style: TextStyle(color: Colors.grey),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const Icon(Icons.arrow_forward_ios, color: Colors.grey, size: 16),
-                  ],
-                ),
+      body: state.when(
+        loading: () => const Center(child: CircularProgressIndicator(color: Color(0xFFD4AF37))),
+        error: (err, stack) => Center(child: Text("Error: \$err", style: const TextStyle(color: Colors.red))),
+        data: (data) => SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Saludo
+              Text(
+                "Hola, \${data.userName}",
+                style: const TextStyle(color: Color(0xFFD4AF37), fontSize: 24, fontWeight: FontWeight.bold),
               ),
-            ),
-          ],
+              const Text(
+                "Bienvenido de nuevo",
+                style: TextStyle(color: Colors.grey, fontSize: 16),
+              ),
+              const SizedBox(height: 30),
+  
+              // Métricas
+              Text("Mis Métricas (\${data.period})", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 15),
+              Row(
+                children: [
+                  Expanded(child: _buildMetricCard("Producción", "\$\${data.totalProduction}", true)),
+                  const SizedBox(width: 15),
+                  Expanded(child: _buildMetricCard("Comisión Pendiente", "\$\${data.totalCommissionPending}", false)),
+                ],
+              ),
+              const SizedBox(height: 30),
+  
+              // Próxima Cita (SECCIÓN INTERACTIVA)
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text("Próxima Cita", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                  TextButton(
+                    onPressed: () {}, 
+                    child: const Text("Ver Todo", style: TextStyle(color: Color(0xFFD4AF37)))
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+  
+              // TARJETA CLICKEABLE
+              if (data.nextAppointment != null)
+                GestureDetector(
+                  onTap: _navigateToAppointmentDetail, 
+                  child: Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E1E1E),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.white10),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 4,
+                          height: 50,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFD4AF37),
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                        const SizedBox(width: 15),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                data.nextAppointment!.time,
+                                style: const TextStyle(color: Color(0xFFD4AF37), fontWeight: FontWeight.bold),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                data.nextAppointment!.clientName,
+                                style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                              ),
+                              Text(
+                                data.nextAppointment!.service,
+                                style: const TextStyle(color: Colors.grey),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Icon(Icons.arrow_forward_ios, color: Colors.grey, size: 16),
+                      ],
+                    ),
+                  ),
+                )
+              else
+                Container(
+                  padding: const EdgeInsets.all(20),
+                   decoration: BoxDecoration(
+                      color: const Color(0xFF1E1E1E),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.white10),
+                    ),
+                  child: const Center(
+                    child: Text("No tienes citas próximas", style: TextStyle(color: Colors.grey)),
+                  )
+                ),
+            ],
+          ),
         ),
       ),
       // Botón Flotante
