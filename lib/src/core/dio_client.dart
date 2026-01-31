@@ -1,8 +1,9 @@
 import 'package:dio/dio.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-// Asegúrate de que esta ruta sea correcta según tu proyecto:
-import '../../core/constants/api_constants.dart'; 
+
+// ✅ CORRECCIÓN AQUÍ: Ruta relativa correcta
+import 'constants/api_constants.dart'; 
 
 part 'dio_client.g.dart';
 
@@ -10,6 +11,7 @@ part 'dio_client.g.dart';
 Dio dioClient(DioClientRef ref) {
   final dio = Dio(
     BaseOptions(
+      // Ahora sí encontrará ApiConstants
       baseUrl: ApiConstants.baseUrl,
       connectTimeout: const Duration(seconds: 10),
       receiveTimeout: const Duration(seconds: 10),
@@ -23,28 +25,22 @@ Dio dioClient(DioClientRef ref) {
   dio.interceptors.add(
     InterceptorsWrapper(
       onRequest: (options, handler) async {
-        // Obtenemos la instancia de preferencias
         final prefs = await SharedPreferences.getInstance();
-        
-        // Intentamos leer el token
         final token = prefs.getString('auth_token');
         
-        // --- LOGS DE DEPURACIÓN (Míralos en la consola) ---
-        print("🔍 INTERCEPTOR: URL -> ${options.path}");
-        print("🔍 INTERCEPTOR: Token encontrado -> $token");
-        // --------------------------------------------------
-
+        // Logs para depuración
+        print("🔍 INTERCEPTOR URL: ${options.path}");
+        
         if (token != null && token.isNotEmpty) {
           options.headers['Authorization'] = 'Bearer $token';
-          print("✅ INTERCEPTOR: Token adjuntado exitosamente");
+          print("✅ TOKEN AGREGADO");
         } else {
-          print("⚠️ INTERCEPTOR: No hay token, se envía petición sin Auth");
+          print("⚠️ NO HAY TOKEN");
         }
 
         return handler.next(options);
       },
       onError: (DioException e, handler) {
-        print("❌ ERROR DIO: ${e.response?.statusCode} - ${e.message}");
         return handler.next(e);
       },
     ),

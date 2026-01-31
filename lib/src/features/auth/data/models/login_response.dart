@@ -5,11 +5,22 @@ part 'login_response.freezed.dart';
 part 'login_response.g.dart';
 
 @freezed
-class LoginResponse with _$LoginResponse {
-  const factory LoginResponse({
-    required String token,
-    required UserModel user,
-  }) = _LoginResponse;
+class LoginResponse {
+  final String accessToken;
+  final String tokenType;
 
-  factory LoginResponse.fromJson(Map<String, dynamic> json) => _$LoginResponseFromJson(json);
+  LoginResponse({
+    required this.accessToken,
+    required this.tokenType,
+  });
+
+  // Constructor para crear el objeto desde el JSON del Backend
+  factory LoginResponse.fromJson(Map<String, dynamic> json) {
+    return LoginResponse(
+      // ✅ AQUÍ ESTÁ LA CLAVE: 
+      // Si el backend envía 'access_token', lo guardamos en 'accessToken'
+      accessToken: json['access_token'] ?? json['token'] ?? '', 
+      tokenType: json['token_type'] ?? 'bearer',
+    );
+  }
 }
