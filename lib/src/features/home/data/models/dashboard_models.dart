@@ -4,36 +4,75 @@ part 'dashboard_models.freezed.dart';
 part 'dashboard_models.g.dart';
 
 @freezed
-class DashboardResponse with _$DashboardResponse {
-  const factory DashboardResponse({
-    required String period,
-    required DashboardMetrics metrics,
-    @JsonKey(name: 'next_appointment') NextAppointment? nextAppointment,
-  }) = _DashboardResponse;
+class DashboardResponse {
+  final String period;
+  final String userName; // Agregado para el saludo "Hola, [Nombre]"
+  final double totalProduction;
+  final double totalCommissionPending;
+  final double totalCommissionPaid;
+  final double averageRating;
+  final int appointmentsCompleted;
+  final NextAppointment? nextAppointment;
 
-  factory DashboardResponse.fromJson(Map<String, dynamic> json) => _$DashboardResponseFromJson(json);
+  DashboardResponse({
+    required this.period,
+    required this.userName,
+    required this.totalProduction,
+    required this.totalCommissionPending,
+    required this.totalCommissionPaid,
+    required this.averageRating,
+    required this.appointmentsCompleted,
+    this.nextAppointment,
+  });
+
+  factory DashboardResponse.fromJson(Map<String, dynamic> json) {
+    // Extraemos el objeto 'metrics' para facilitar la lectura
+    final metrics = json['metrics'] ?? {};
+
+    return DashboardResponse(
+      period: json['period'] ?? '',
+      
+      // 1. Mapeamos 'user_name' (Backend) a 'userName' (Flutter)
+      userName: json['user_name'] ?? 'Usuario',
+
+      // 2. Métricas Financieras
+      totalProduction: (metrics['total_production'] ?? 0).toDouble(),
+      totalCommissionPending: (metrics['total_commission_pending'] ?? 0).toDouble(),
+      
+      // Si el backend aún no envía pagadas, ponemos 0 para no romper la app
+      totalCommissionPaid: (metrics['total_commission_paid'] ?? 0).toDouble(),
+
+      // 3. CORRECCIÓN: El backend envía 'rating', no 'average_rating'
+      averageRating: (metrics['rating'] ?? 0).toDouble(),
+
+      // 4. CORRECCIÓN: El backend envía 'completed_services', no 'appointments_completed'
+      appointmentsCompleted: (metrics['completed_services'] ?? 0).toInt(),
+
+      // 5. Próxima Cita (puede ser null)
+      nextAppointment: json['next_appointment'] != null
+          ? NextAppointment.fromJson(json['next_appointment'])
+          : null,
+    );
+  }
 }
 
-@freezed
-class DashboardMetrics with _$DashboardMetrics {
-  const factory DashboardMetrics({
-    @JsonKey(name: 'total_production') required double totalProduction,
-    @JsonKey(name: 'total_commission_paid') required double totalCommissionPaid,
-    @JsonKey(name: 'total_commission_pending') required double totalCommissionPending,
-    @JsonKey(name: 'appointments_completed') required int appointmentsCompleted,
-    @JsonKey(name: 'average_rating') required double averageRating,
-  }) = _DashboardMetrics;
+class NextAppointment {
+  final String clientName;
+  final String service;
+  final String time;
 
-  factory DashboardMetrics.fromJson(Map<String, dynamic> json) => _$DashboardMetricsFromJson(json);
-}
+  NextAppointment({
+    required this.clientName,
+    required this.service,
+    required this.time,
+  });
 
-@freezed
-class NextAppointment with _$NextAppointment {
-  const factory NextAppointment({
-    @JsonKey(name: 'client_name') required String clientName,
-    required String service,
-    required String time,
-  }) = _NextAppointment;
-
-  factory NextAppointment.fromJson(Map<String, dynamic> json) => _$NextAppointmentFromJson(json);
+  factory NextAppointment.fromJson(Map<String, dynamic> json) {
+    return NextAppointment(
+      // 6. CORRECCIÓN: El backend envía 'client', no 'client_name'
+      clientName: json['client'] ?? 'Cliente',
+      service: json['service'] ?? 'Servicio',
+      time: json['time'] ?? '--:--',
+    );
+  }
 }
