@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:app_jv_staff/src/core/theme/app_theme.dart';
+// Asegúrate de que tus imports de tema y otros archivos sigan aquí
 import 'package:app_jv_staff/src/features/home/presentation/dashboard_controller.dart';
-// IMPORTS DE NAVEGACIÓN
+// Ajusta estos imports según la ubicación real en tu proyecto
 import 'package:app_jv_staff/src/features/appointments/presentation/appointment_detail_screen.dart';
 import 'package:app_jv_staff/src/features/appointments/domain/models/appointment_model.dart';
-// IMPORT PARA SUBIR EVIDENCIA (Si lo usas directo aquí también)
 import 'package:app_jv_staff/src/features/media/presentation/upload_evidence_screen.dart';
 
 class DashboardScreen extends ConsumerStatefulWidget {
@@ -18,15 +17,15 @@ class DashboardScreen extends ConsumerStatefulWidget {
 class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   
   void _navigateToAppointmentDetail() {
-    // Simulamos el objeto de la cita (En el futuro esto vendrá del backend real)
+    // Simulamos cita por ahora (puedes conectarlo a data.nextAppointment después)
     final appointment = AppointmentModel(
       id: 1,
-      clientName: "Carlos Perez",
-      serviceName: "Corte + Barba",
-      startTime: DateTime.now().add(const Duration(hours: 1)),
+      clientName: "Cliente Actual",
+      serviceName: "Servicio",
+      startTime: DateTime.now(),
       status: "confirmed",
-      isVip: true,
-      evidenceUrl: null, // Aún no tiene foto
+      isVip: false,
+      evidenceUrl: null,
     );
 
     Navigator.push(
@@ -38,31 +37,30 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   }
 
   void _handleUploadDirect() async {
-     // Lógica para el botón flotante amarillo
-     await Navigator.push(
-       context, 
-       MaterialPageRoute(builder: (_) => const UploadEvidenceScreen())
-     );
+      await Navigator.push(
+        context, 
+        MaterialPageRoute(builder: (_) => const UploadEvidenceScreen())
+      );
   }
 
   @override
   Widget build(BuildContext context) {
-    // Escuchamos el proveedor (aunque sea dummy por ahora para mantener la estructura)
     final state = ref.watch(dashboardControllerProvider);
 
     return Scaffold(
-      backgroundColor: Colors.black, // Fondo oscuro
+      backgroundColor: Colors.black,
       appBar: AppBar(
         title: const Text('Dashboard', style: TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: true,
-        automaticallyImplyLeading: false, // Quita la flecha de volver al login
+        automaticallyImplyLeading: false,
         actions: [
           IconButton(
             icon: const Icon(Icons.logout, color: Colors.white),
             onPressed: () {
-              Navigator.of(context).pop(); // Salir (Volver al Login)
+              // Aquí podrías agregar lógica de logout real
+              Navigator.of(context).pop(); 
             },
           )
         ],
@@ -75,9 +73,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Saludo
+              // 1. SALUDO CORREGIDO (Sin la barra invertida)
               Text(
-                "Hola, \${data.userName}",
+                "Hola, ${data.userName}", 
                 style: const TextStyle(color: Color(0xFFD4AF37), fontSize: 24, fontWeight: FontWeight.bold),
               ),
               const Text(
@@ -85,20 +83,22 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 style: TextStyle(color: Colors.grey, fontSize: 16),
               ),
               const SizedBox(height: 30),
-  
-              // Métricas
-              Text("Mis Métricas (\${data.period})", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+
+              // 2. TÍTULO MÉTRICAS CORREGIDO
+              Text("Mis Métricas (${data.period})", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
               const SizedBox(height: 15),
+              
+              // 3. TARJETAS DE DINERO CORREGIDAS
               Row(
                 children: [
-                  Expanded(child: _buildMetricCard("Producción", "\$\${data.totalProduction}", true)),
+                  Expanded(child: _buildMetricCard("Producción", "\$${data.totalProduction}", true)),
                   const SizedBox(width: 15),
-                  Expanded(child: _buildMetricCard("Comisión Pendiente", "\$\${data.totalCommissionPending}", false)),
+                  Expanded(child: _buildMetricCard("Comisión Pendiente", "\$${data.totalCommissionPending}", false)),
                 ],
               ),
               const SizedBox(height: 30),
-  
-              // Próxima Cita (SECCIÓN INTERACTIVA)
+
+              // PRÓXIMA CITA
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -110,8 +110,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 ],
               ),
               const SizedBox(height: 10),
-  
-              // TARJETA CLICKEABLE
+
               if (data.nextAppointment != null)
                 GestureDetector(
                   onTap: _navigateToAppointmentDetail, 
@@ -137,6 +136,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
+                              // 4. DATOS CITA CORREGIDOS
                               Text(
                                 data.nextAppointment!.time,
                                 style: const TextStyle(color: Color(0xFFD4AF37), fontWeight: FontWeight.bold),
@@ -162,10 +162,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 Container(
                   padding: const EdgeInsets.all(20),
                    decoration: BoxDecoration(
-                      color: const Color(0xFF1E1E1E),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Colors.white10),
-                    ),
+                     color: const Color(0xFF1E1E1E),
+                     borderRadius: BorderRadius.circular(16),
+                     border: Border.all(color: Colors.white10),
+                   ),
                   child: const Center(
                     child: Text("No tienes citas próximas", style: TextStyle(color: Colors.grey)),
                   )
@@ -174,7 +174,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           ),
         ),
       ),
-      // Botón Flotante
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _handleUploadDirect,
         backgroundColor: const Color(0xFFD4AF37),
