@@ -1,19 +1,22 @@
 import 'dart:convert';
 
 class LoginResponse {
-  final String token;
-  final User user;
+  final String accessToken;
+  final String tokenType;
 
-  LoginResponse({required this.token, required this.user});
+  LoginResponse({
+    required this.accessToken,
+    required this.tokenType,
+  });
 
   factory LoginResponse.fromJson(Map<String, dynamic> json) {
     return LoginResponse(
-      token: json['token'] ?? '',
-      user: User.fromJson(json['user'] ?? {}),
+      // Mapeamos 'access_token' (del backend) a 'accessToken' (de Flutter)
+      accessToken: json['access_token'] ?? json['token'] ?? '',
+      tokenType: json['token_type'] ?? 'bearer',
     );
   }
 }
-
 class User {
   final int id;
   final String name;
