@@ -30,6 +30,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# --- ARCHIVOS ESTÁTICOS (Para ver las evidencias) ---
+from fastapi.staticfiles import StaticFiles
+import os
+if not os.path.exists("uploads"):
+    os.makedirs("uploads")
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+
+
 # --- CONEXIÓN DE RUTAS ---
 # Usamos verificaciones para que no explote de golpe si falla el import
 if 'auth' in locals():
