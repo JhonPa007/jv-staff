@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import text
-# 1. AGREGAMOS 'datetime' y 'timedelta' para manejar la hora
 from datetime import date, datetime, timedelta
 from typing import Optional
 
@@ -10,23 +9,20 @@ from app.routers.auth import get_current_user
 
 router = APIRouter(prefix="/staff", tags=["Staff Reports"])
 
-# --- FUNCIÓN CORREGIDA CON ZONA HORARIA (PERÚ UTC-5) ---
+# --- AJUSTE DE HORA Y FECHA (PERÚ) ---
 def get_date_range(start_date: Optional[date], end_date: Optional[date]):
-    # Definimos el "Ahora" ajustado a Perú (UTC - 5 horas)
+    # 1. Obtenemos la hora actual y le restamos 5 horas (UTC-5 Perú)
     utc_now = datetime.utcnow()
     peru_time = utc_now - timedelta(hours=5)
     today_peru = peru_time.date()
 
     if not start_date:
-        # Primer día del mes actual (según Perú)
         start_date = date(today_peru.year, today_peru.month, 1)
     
     if not end_date:
-        # Día actual (según Perú)
         end_date = today_peru
         
     return start_date, end_date
-# -------------------------------------------------------
 
 @router.get("/dashboard")
 def get_dashboard(
@@ -38,7 +34,6 @@ def get_dashboard(
     user_id = current_user.id
     user_name = current_user.email.split('@')[0].capitalize()
     
-    # Aquí ya recibiremos las fechas corregidas (Enero 31)
     start, end = get_date_range(start_date, end_date)
 
     # 1. PRODUCCIÓN
@@ -86,8 +81,6 @@ def get_dashboard(
     rating = 4.8
 
     # 4. PRÓXIMA CITA
-    # Nota: Aquí usamos NOW() de la BD. Si la BD está en UTC, funcionará bien 
-    # porque compara contra el momento absoluto.
     next_appt = None
     try:
         query_next = text("""
@@ -101,9 +94,6 @@ def get_dashboard(
             ORDER BY r.fecha_hora_inicio ASC 
             LIMIT 1
         """)
-        # Agregué "- INTERVAL '5 hours'" en el WHERE de arriba por si acaso 
-        # tuvieras citas agendadas hace 1 hora que aún quieras ver como "próximas".
-        # Si prefieres estricto futuro, quita esa parte.
         
         next_appt_row = db.execute(query_next, {"uid": user_id}).first()
         
@@ -121,9 +111,18 @@ def get_dashboard(
         print(f"❌ ERROR SQL CITA: {e}")
         db.rollback()
 
+    # --- TRADUCCIÓN MANUAL DE MESES ---
+    meses_es = {
+        1: "Enero", 2: "Febrero", 3: "Marzo", 4: "Abril",
+        5: "Mayo", 6: "Junio", 7: "Julio", 8: "Agosto",
+        9: "Septiembre", 10: "Octubre", 11: "Noviembre", 12: "Diciembre"
+    }
+    nombre_mes = meses_es.get(start.month, "Mes")
+    periodo_espanol = f"{nombre_mes} {start.year}"
+    # ----------------------------------
+
     return {
-        # Formateamos el periodo en Español si quieres, o inglés por defecto
-        "period": start.strftime("%B %Y"), 
+        "period": periodo_espanol, # <--- Usamos la variable en español
         "user_name": user_name,
         "metrics": {
             "total_production": float(production or 0),
