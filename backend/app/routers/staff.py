@@ -100,3 +100,28 @@ def get_dashboard(
         },
         "next_appointment": next_appt
     }
+
+
+# --- AGREGAR AL FINAL DE staff.py ---
+from sqlalchemy import inspect
+
+@router.get("/debug/structure")
+def get_db_structure(db: Session = Depends(get_db)):
+    """
+    Esta función inspecciona la base de datos y devuelve 
+    todos los nombres de tablas y sus columnas.
+    """
+    inspector = inspect(db.get_bind())
+    schema_info = {}
+    
+    # 1. Obtener todas las tablas
+    table_names = inspector.get_table_names()
+    
+    for table in table_names:
+        columns = []
+        # 2. Obtener columnas de cada tabla
+        for col in inspector.get_columns(table):
+            columns.append(f"{col['name']} ({col['type']})")
+        schema_info[table] = columns
+        
+    return schema_info
