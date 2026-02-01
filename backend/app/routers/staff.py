@@ -25,20 +25,17 @@ def get_dashboard(
     current_user: dict = Depends(get_current_user)
 ):
     user_id = current_user.id
-    # Obtenemos el nombre del email (ej: juan@gmail.com -> Juan)
     user_name = current_user.email.split('@')[0].capitalize()
     
     start, end = get_date_range(start_date, end_date)
 
-    # ---------------------------------------------------------
-    # 1. PRODUCCIÓN (Con red de seguridad)
-    # ---------------------------------------------------------
+    # 1. PRODUCCIÓN
+    # ⚠️ CAMBIO AQUÍ: Probamos con 'ventas' (plural) en vez de 'venta'
     try:
-        # INTENTO 1: Buscar por 'empleado_id' en la cabecera 'venta'
         query_prod = text("""
             SELECT COALESCE(SUM(vi.subtotal_item_neto), 0)
             FROM venta_items vi
-            JOIN venta v ON vi.venta_id = v.id
+            JOIN ventas v ON vi.venta_id = v.id  -- CAMBIADO 'venta' POR 'ventas'
             WHERE v.empleado_id = :uid
             AND vi.servicio_id IS NOT NULL
             AND vi.es_trabajo_extra = false
@@ -47,12 +44,10 @@ def get_dashboard(
         production = db.execute(query_prod, {"uid": user_id, "start": start, "end": end}).scalar()
     except Exception as e:
         print(f"❌ ERROR SQL PRODUCCIÓN: {e}")
-        db.rollback() # <--- ¡ESTO ES VITAL! Limpia el error para poder seguir.
+        db.rollback()
         production = 0
 
-    # ---------------------------------------------------------
     # 2. COMISIONES
-    # ---------------------------------------------------------
     try:
         query_com_pending = text("""
             SELECT COALESCE(SUM(monto_comision), 0) FROM comisiones 
@@ -61,21 +56,20 @@ def get_dashboard(
         pending_comm = db.execute(query_com_pending, {"uid": user_id}).scalar()
     except Exception as e:
         print(f"❌ ERROR SQL COMISIONES: {e}")
-        db.rollback() # Limpiamos error si falla
+        db.rollback()
         pending_comm = 0
 
-    # 3. METRICAS DUMMY (Datos seguros para que no se vea vacío)
+    # 3. METRICAS DUMMY
     rating = 4.8
     completed_services = 12
 
-    # ---------------------------------------------------------
-    # 4. PRÓXIMA CITA (Esta debería funcionar bien)
-    # ---------------------------------------------------------
+    # 4. PRÓXIMA CITA
+    # ⚠️ CAMBIO AQUÍ: Probamos con 'reservas' (plural) en vez de 'reserva'
     next_appt = None
     try:
         query_next = text("""
             SELECT fecha_hora_inicio, servicio_id, cliente_id 
-            FROM reserva 
+            FROM reservas                      -- CAMBIADO 'reserva' POR 'reservas'
             WHERE empleado_id = :uid 
             AND estado = 'Programada' 
             AND fecha_hora_inicio >= NOW()
