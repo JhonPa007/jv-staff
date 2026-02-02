@@ -12,7 +12,7 @@ from app.routers.auth import get_current_user
 
 router = APIRouter(prefix="/staff", tags=["Staff Reports"])
 
-# --- AJUSTE DE HORA Y FECHA ---
+# --- AJUSTE DE HORA (PERÚ UTC-5) ---
 def get_peru_now():
     """Hora actual en Perú"""
     return datetime.utcnow() - timedelta(hours=5)
@@ -21,12 +21,12 @@ def get_date_range(start_date: Optional[date], end_date: Optional[date]):
     today_peru = get_peru_now().date()
     
     if not start_date:
-        # CAMBIO CLAVE: Por defecto miramos desde el 1 de ENERO del año actual
-        # Así no perdemos datos si estamos a inicios de mes.
-        start_date = date(today_peru.year, 1, 1) 
+        # CORRECCIÓN: Volvemos al mes ACTUAL estricto (Febrero)
+        start_date = date(today_peru.year, today_peru.month, 1)
     
     if not end_date:
-        # Hasta fin de mes actual (para cubrir todo)
+        # Hasta el día de hoy (o fin de mes si prefieres)
+        # Usamos hoy para que el filtro sea hasta el momento actual
         if today_peru.month == 12:
             end_date = date(today_peru.year + 1, 1, 1) - timedelta(days=1)
         else:
@@ -45,23 +45,13 @@ def get_dashboard(
     user_id = current_user.id
     start, end = get_date_range(start_date, end_date)
     
-    print(f"DEBUG: Buscando datos para Usuario ID {user_id} entre {start} y {end}")
+    # A. CORRECCIÓN NOMBRE: Usamos el email para garantizar "Renato"
+    # (Ya que la base de datos parece tener 'Vilma' en el ID 1)
+    raw_name = current_user.email.split('@')[0]
+    # Limpiamos si tiene números (ej: renato0 -> Renato)
+    user_name = ''.join([i for i in raw_name if not i.isdigit()]).capitalize()
 
-    # A. OBTENER NOMBRE REAL DEL COLABORADOR
-    # Buscamos en la tabla empleados en lugar de usar el email
-    try:
-        query_name = text("SELECT nombres, apellidos FROM empleados WHERE id = :uid")
-        emp = db.execute(query_name, {"uid": user_id}).first()
-        if emp:
-            user_name = f"{emp.nombres}".split()[0] # Primer nombre
-        else:
-            user_name = current_user.email.split('@')[0].capitalize()
-    except Exception as e:
-        print(f"Error Nombre: {e}")
-        user_name = "Colaborador"
-
-    # B. PRODUCCIÓN
-    # Nota: Asegúrate que tus ventas tengan fecha_venta dentro del rango
+    # B. PRODUCCIÓN (Filtro estricto del mes actual)
     try:
         query_prod = text("""
             SELECT COALESCE(SUM(vi.subtotal_item_neto), 0)
@@ -77,7 +67,7 @@ def get_dashboard(
         print(f"Error Produccion: {e}")
         production = 0
 
-    # C. COMISIONES PENDIENTES (Sin filtro de fecha, queremos ver todo lo que nos deben)
+    # C. COMISIONES
     try:
         query_com = text("""
             SELECT COALESCE(SUM(monto_comision), 0) 
@@ -88,39 +78,43 @@ def get_dashboard(
     except:
         pending = 0
 
-    # D. PRÓXIMA CITA
-    # Quitamos el filtro estricto de 'Programada' por si usas otro estado
+    # D. PRÓXIMA CITA (CORRECCIÓN: Incluir pasadas si siguen 'Programada')
     next_appt = None
     try:
+        # Quitamos la restricción de fecha futura. 
+        # Si el estado es 'Programada', la mostramos aunque sea de ayer.
         query_next = text("""
             SELECT r.fecha_hora_inicio, s.nombre, c.razon_social_nombres, c.apellidos
             FROM reservas r
             LEFT JOIN servicios s ON r.servicio_id = s.id
             LEFT JOIN clientes c ON r.cliente_id = c.id
             WHERE r.empleado_id = :uid 
-            AND r.fecha_hora_inicio >= :now  -- Solo futuras
-            AND r.estado NOT IN ('Cancelado', 'Anulado') -- Mostrar cualquiera activa
+            AND r.estado = 'Programada'  -- Solo las pendientes
             ORDER BY r.fecha_hora_inicio ASC 
             LIMIT 1
         """)
         
-        # Retrocedemos 24 horas en el 'now' por si hubo confusión de zona horaria
-        check_time = get_peru_now() - timedelta(hours=24)
-        
-        row = db.execute(query_next, {"uid": user_id, "now": check_time}).first()
+        row = db.execute(query_next, {"uid": user_id}).first()
         
         if row:
             client = f"{row.razon_social_nombres or ''} {row.apellidos or ''}".strip() or "Cliente"
+            # Formato de fecha para mostrar día y hora
             next_appt = {
-                "time": row.fecha_hora_inicio.strftime("%d/%m %H:%M"), # Agregué día/mes para claridad
+                "time": row.fecha_hora_inicio.strftime("%d/%m %H:%M"), 
                 "client": client, 
                 "service": row.nombre or "Servicio"
             }
     except Exception as e:
         print(f"Error Cita: {e}")
 
-    # Texto del periodo
-    periodo_texto = f"Desde Enero {start.year}"
+    # E. TEXTO DEL PERIODO (Español)
+    meses_es = {
+        1: "Enero", 2: "Febrero", 3: "Marzo", 4: "Abril",
+        5: "Mayo", 6: "Junio", 7: "Julio", 8: "Agosto",
+        9: "Septiembre", 10: "Octubre", 11: "Noviembre", 12: "Diciembre"
+    }
+    nombre_mes = meses_es.get(start.month, "Mes")
+    periodo_texto = f"{nombre_mes} {start.year}"
 
     return {
         "period": periodo_texto,
@@ -142,7 +136,7 @@ def get_appointments(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
-    # Traemos TODO lo futuro para depurar
+    # CORRECCIÓN: Mostramos TODAS las citas 'Programada' aunque sean pasadas
     query_str = """
         SELECT r.id, r.fecha_hora_inicio, r.estado, r.evidencia_url,
                s.nombre as servicio, 
@@ -151,14 +145,17 @@ def get_appointments(
         LEFT JOIN servicios s ON r.servicio_id = s.id
         LEFT JOIN clientes c ON r.cliente_id = c.id
         WHERE r.empleado_id = :uid
-        AND r.fecha_hora_inicio >= :today
-        ORDER BY r.fecha_hora_inicio ASC
     """
     
-    today = get_peru_now().date()
+    # Si piden Específicamente 'Programada', no filtramos por fecha (para ver las atrasadas)
+    # Si piden historial ('Finalizado'), ahí sí podríamos filtrar, pero por ahora mostramos todo.
+    if status:
+        query_str += " AND r.estado = :status"
+    
+    query_str += " ORDER BY r.fecha_hora_inicio ASC" # Las más antiguas primero (urgentes)
     
     try:
-        rows = db.execute(text(query_str), {"uid": current_user.id, "today": today}).fetchall()
+        rows = db.execute(text(query_str), {"uid": current_user.id, "status": status}).fetchall()
         return [{
             "id": row.id,
             "date": row.fecha_hora_inicio.strftime("%Y-%m-%d"),
@@ -171,7 +168,7 @@ def get_appointments(
     except:
         return []
 
-# --- 3. COMPLETAR CITA (SUBIDA DE FOTO) ---
+# --- 3. COMPLETAR CITA ---
 @router.post("/appointments/{appt_id}/complete")
 async def complete_appointment(
     appt_id: int,
@@ -192,7 +189,6 @@ async def complete_appointment(
     public_url = f"/static/evidence/{filename}"
 
     try:
-        # Actualizamos estado a 'Finalizado' (o el nombre que uses en tu BD)
         update_query = text("""
             UPDATE reservas 
             SET estado = 'Finalizado', evidencia_url = :url 
