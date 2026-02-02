@@ -12,7 +12,7 @@ from app.routers.auth import get_current_user
 
 router = APIRouter(prefix="/staff", tags=["Staff Reports"])
 
-# --- UTILIDADES ---
+# --- UTILIDADES DE TIEMPO (PERÚ UTC-5) ---
 def get_peru_now():
     return datetime.utcnow() - timedelta(hours=5)
 
@@ -27,27 +27,36 @@ def get_date_range(start_date: Optional[date], end_date: Optional[date]):
             end_date = date(today.year, today.month + 1, 1) - timedelta(days=1)
     return start_date, end_date
 
-# --- HELPER: BÚSQUEDA DIAGNÓSTICA ---
+# --- HELPER: BUSCAR EMPLEADO POR EMAIL (SIN TRUCOS) ---
 def get_logged_employee(db: Session, current_user: dict):
-    # 1. Limpiamos el email del token (Login)
-    email_token = current_user.email.strip().lower()
-    print(f"🕵️‍♂️ BUSCANDO EN BD EL EMAIL: '{email_token}'")
+    # 1. Obtenemos el email del token, quitamos espacios y pasamos a minúsculas
+    token_email = current_user.email.strip().lower()
+    
+    print(f"🔐 LOGIN: Buscando empleado con email: '{token_email}'")
 
+    # 2. Buscamos en la BD limpiando también el campo de la BD (TRIM y LOWER)
+    # Esto asegura que ' correo@gmail.com ' sea igual a 'correo@gmail.com'
     try:
-        # 2. Buscamos coincidencia exacta en minúsculas
-        query = text("SELECT * FROM empleados WHERE LOWER(email) = :email LIMIT 1")
-        employee = db.execute(query, {"email": email_token}).mappings().first()
+        query = text("""
+            SELECT * FROM empleados 
+            WHERE LOWER(TRIM(email)) = :email 
+            LIMIT 1
+        """)
+        employee = db.execute(query, {"email": token_email}).mappings().first()
         
         if employee:
-            print(f"✅ ENCONTRADO: ID={employee['id']}, Nombre={employee['nombres']}")
+            print(f"✅ ÉXITO: Usuario identificado como {employee['nombres']} (ID: {employee['id']})")
+            if not employee['activo']:
+                 raise HTTPException(status_code=403, detail="El colaborador está inactivo.")
             return employee
         else:
-            print(f"❌ NO ENCONTRADO. El email '{email_token}' no está en la tabla 'empleados'.")
-            return None
-            
+            # Si no lo encuentra, lanzamos error claro. Nada de 'Demo'.
+            print(f"❌ ERROR: No existe ningún empleado con el email '{token_email}'")
+            raise HTTPException(status_code=404, detail=f"No se encontró perfil de empleado para {token_email}")
+
     except Exception as e:
-        print(f"💥 ERROR SQL: {e}")
-        return None
+        print(f"💥 ERROR DB: {e}")
+        raise e
 
 # ==========================================
 # 1. DASHBOARD
@@ -59,24 +68,21 @@ def get_dashboard(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
-    start, end = get_date_range(start_date, end_date)
-    
-    # 1. Intentamos obtener al empleado real (Renato - ID 5)
+    # 1. Identificación estricta
     emp = get_logged_employee(db, current_user)
+    uid = emp['id'] # Aquí obtendrá el ID 5 (Renato) automáticamente
     
-    if emp:
-        # CASO ÉXITO: Usamos el ID 5
-        uid = emp['id']
-        first_name = emp['nombres'].split()[0].title()
-        # 🔥 AQUÍ ESTÁ LO QUE PEDISTE: Mostramos el ID en el nombre
-        user_name_display = f"{first_name} (ID: {uid})"
+    # Formatear nombre: "Renato Antonio" -> "Renato"
+    first_name = emp['nombres'].split()[0].title()
+    if emp['apellidos']:
+        last_name = emp['apellidos'].split()[0].title()
+        full_name = f"{first_name} {last_name}"
     else:
-        # CASO FALLO: Usamos el ID del Token (probablemente ID de Auth)
-        uid = current_user.id
-        user_name_display = f"Demo (ID Token: {uid})"
-        print(f"⚠️ Usando modo Demo con ID {uid} porque no se encontró el empleado.")
+        full_name = first_name
 
-    print(f"📊 CALCULANDO MÉTRICAS PARA ID: {uid} entre {start} y {end}")
+    # Fechas
+    start, end = get_date_range(start_date, end_date)
+    print(f"📊 Dashboard para ID {uid} ({full_name}) - {start} a {end}")
 
     # 2. PRODUCCIÓN
     try:
@@ -103,6 +109,7 @@ def get_dashboard(
     # 4. PRÓXIMA CITA
     next_appt = None
     try:
+        # Quitamos restricción de fecha para ver todas las pendientes ('Programada')
         query_next = text("""
             SELECT r.fecha_hora_inicio, s.nombre, c.razon_social_nombres, c.apellidos
             FROM reservas r
@@ -128,7 +135,7 @@ def get_dashboard(
 
     return {
         "period": periodo,
-        "user_name": user_name_display, # Aquí va el nombre con ID
+        "user_name": full_name,
         "metrics": {"total_production": float(production), "total_commission_pending": float(pending), "total_commission_paid": 0.0, "rating": 5.0, "completed_services": 0},
         "next_appointment": next_appt
     }
@@ -138,9 +145,8 @@ def get_dashboard(
 # ==========================================
 @router.get("/appointments")
 def get_appointments(status: Optional[str] = None, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
-    # Lógica idéntica para obtener ID
     emp = get_logged_employee(db, current_user)
-    uid = emp['id'] if emp else current_user.id
+    uid = emp['id']
     
     sql = """
         SELECT r.id, r.fecha_hora_inicio, r.estado, r.evidencia_url,
@@ -170,11 +176,13 @@ def get_appointments(status: Optional[str] = None, db: Session = Depends(get_db)
     except:
         return []
 
-# ... El resto de endpoints (complete, reports) usarán la misma lógica ...
+# ==========================================
+# 3. COMPLETAR CITA
+# ==========================================
 @router.post("/appointments/{appt_id}/complete")
 async def complete_appointment(appt_id: int, file: UploadFile = File(...), db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
     emp = get_logged_employee(db, current_user)
-    uid = emp['id'] if emp else current_user.id
+    uid = emp['id']
     
     os.makedirs("uploads/evidence", exist_ok=True)
     filename = f"evidencia_{appt_id}_{uuid.uuid4().hex[:8]}.{file.filename.split('.')[-1]}"
@@ -184,19 +192,23 @@ async def complete_appointment(appt_id: int, file: UploadFile = File(...), db: S
     url = f"/static/evidence/{filename}"
     
     try:
+        # Validamos que la cita sea del empleado correcto
         stmt = text("UPDATE reservas SET estado = 'Finalizado', evidencia_url = :url WHERE id = :aid AND empleado_id = :uid")
         res = db.execute(stmt, {"url": url, "aid": appt_id, "uid": uid})
         db.commit()
-        if res.rowcount == 0: raise HTTPException(404, "Cita no encontrada")
+        if res.rowcount == 0: raise HTTPException(404, "Cita no encontrada o no pertenece al usuario")
         return {"message": "OK", "url": url}
     except Exception as e:
         db.rollback()
         raise HTTPException(500, str(e))
 
+# ==========================================
+# 4. REPORTES DE VENTAS
+# ==========================================
 @router.get("/reports/sales")
 def get_sales_report(start_date: Optional[date] = None, end_date: Optional[date] = None, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
     emp = get_logged_employee(db, current_user)
-    uid = emp['id'] if emp else current_user.id
+    uid = emp['id']
     start, end = get_date_range(start_date, end_date)
     
     query = text("""
@@ -228,12 +240,16 @@ def get_sales_report(start_date: Optional[date] = None, end_date: Optional[date]
     except:
         return []
 
+# ==========================================
+# 5. REPORTES FINANCIEROS
+# ==========================================
 @router.get("/reports/financial")
 def get_financial_report(type: str, start_date: Optional[date] = None, end_date: Optional[date] = None, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
     emp = get_logged_employee(db, current_user)
-    uid = emp['id'] if emp else current_user.id
+    uid = emp['id']
     start, end = get_date_range(start_date, end_date)
     data = []
+    
     if type == 'commissions':
         query = text("""
             SELECT c.fecha_generacion as fecha, c.monto_comision as monto, c.estado, s.nombre as concepto
@@ -245,9 +261,11 @@ def get_financial_report(type: str, start_date: Optional[date] = None, end_date:
         rows = db.execute(query, {"uid": uid, "start": start, "end": end}).fetchall()
         for row in rows:
             data.append({"date": row.fecha.strftime("%d/%m/%Y"), "concept": row.concepto or "Comisión", "amount": float(row.monto or 0), "status": row.estado})
+    
     elif type == 'tips':
         query = text("SELECT fecha_registro, monto, metodo_pago, entregado_al_barbero FROM propinas WHERE empleado_id = :uid AND fecha_registro BETWEEN :start AND :end ORDER BY fecha_registro DESC")
         rows = db.execute(query, {"uid": uid, "start": start, "end": end}).fetchall()
         for row in rows:
             data.append({"date": row.fecha_registro.strftime("%d/%m/%Y"), "concept": f"Propina ({row.metodo_pago})", "amount": float(row.monto or 0), "status": "Pagado" if row.entregado_al_barbero else "Pendiente"})
+            
     return data
