@@ -8,4 +8,4 @@ requests
 # --- NUEVAS LIBRERÍAS NECESARIAS ---
 python-jose[cryptography]
 passlib[bcrypt]
-multipart
+python-multipart
