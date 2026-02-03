@@ -1,8 +1,11 @@
 fastapi
-uvicorn[standard]
-sqlalchemy      # O el ORM que uses en tu sistema principal
-psycopg2-binary # Si usas PostgreSQL
-mysql-connector-python # Si usas MySQL
-python-multipart # Para subir fotos
-pyjwt           # Para seguridad y tokens
-requests        # Para conectar con servicios externos
+uvicorn
+sqlalchemy
+psycopg2-binary
+pydantic
+python-dotenv
+requests
+# --- NUEVAS LIBRERÍAS NECESARIAS ---
+python-jose[cryptography]
+passlib[bcrypt]
+multipart
