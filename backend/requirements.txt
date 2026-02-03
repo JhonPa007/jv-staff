@@ -5,7 +5,7 @@ psycopg2-binary
 pydantic
 python-dotenv
 requests
-# --- NUEVAS LIBRERÍAS NECESARIAS ---
 python-jose[cryptography]
 passlib[bcrypt]
 python-multipart
+Werkzeug
