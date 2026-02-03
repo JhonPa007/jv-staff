@@ -14,20 +14,24 @@ router = APIRouter(prefix="/staff", tags=["Staff Reports"])
 
 # --- UTILIDADES ---
 def get_peru_now():
-    """Hora actual en Perú (UTC-5)"""
+    """Hora actual en Perú (UTC-5) para comparar citas"""
     return datetime.utcnow() - timedelta(hours=5)
 
 def get_date_range(start_date: Optional[date], end_date: Optional[date]):
     today = get_peru_now().date()
-    # Por defecto: Mes actual
+    
+    # Si no hay fecha inicio, usamos el 1ro del mes actual
     if not start_date:
         start_date = date(today.year, today.month, 1)
+        
+    # Si no hay fecha fin, calculamos el último día del mes actual
     if not end_date:
-        # Lógica para fin de mes
         if today.month == 12:
-            end_date = date(today.year + 1, 1, 1) - timedelta(days=1)
+            next_month = date(today.year + 1, 1, 1)
         else:
-            end_date = date(today.year, today.month + 1, 1) - timedelta(days=1)
+            next_month = date(today.year, today.month + 1, 1)
+        end_date = next_month - timedelta(days=1)
+        
     return start_date, end_date
 
 # --- HELPER: BUSCAR EMPLEADO ---
@@ -79,17 +83,18 @@ def get_dashboard(
     except:
         production = 0
 
-    # B. COMISIONES PENDIENTES (Total acumulado, sin filtro de fecha usualmente)
+    # B. COMISIONES PENDIENTES (Total acumulado histórico, sin borrar lo que te deben)
     try:
         query_com = text("SELECT COALESCE(SUM(monto_comision), 0) FROM comisiones WHERE empleado_id = :uid AND estado = 'Pendiente'")
         pending = db.execute(query_com, {"uid": uid}).scalar() or 0
     except:
         pending = 0
 
-    # C. PRÓXIMA CITA (CORREGIDO: Solo futuras) ✅
+    # C. PRÓXIMA CITA (CORREGIDO: >= NOW) ✅
     next_appt = None
     try:
-        peru_now = get_peru_now()
+        peru_now = get_peru_now() # Usamos la hora exacta actual
+        
         query_next = text("""
             SELECT r.fecha_hora_inicio, s.nombre, c.razon_social_nombres, c.apellidos
             FROM reservas r
@@ -97,10 +102,12 @@ def get_dashboard(
             LEFT JOIN clientes c ON r.cliente_id = c.id
             WHERE r.empleado_id = :uid 
             AND r.estado = 'Programada'
-            AND r.fecha_hora_inicio >= :now  -- <--- FILTRO DE FECHA AHORA
+            AND r.fecha_hora_inicio >= :now  -- <--- ESTO ELIMINA LAS CITAS DE ENERO
             ORDER BY r.fecha_hora_inicio ASC LIMIT 1
         """)
+        
         row = db.execute(query_next, {"uid": uid, "now": peru_now}).first()
+        
         if row:
             client = f"{row.razon_social_nombres or ''} {row.apellidos or ''}".strip() or "Cliente"
             next_appt = {
@@ -108,8 +115,8 @@ def get_dashboard(
                 "client": client, 
                 "service": row.nombre or "Servicio"
             }
-    except:
-        pass
+    except Exception as e:
+        print(f"Error Cita: {e}")
 
     meses = {1:"Enero", 2:"Febrero", 3:"Marzo", 4:"Abril", 5:"Mayo", 6:"Junio", 7:"Julio", 8:"Agosto", 9:"Septiembre", 10:"Octubre", 11:"Noviembre", 12:"Diciembre"}
     periodo = f"{meses.get(start.month)} {start.year}"
@@ -135,7 +142,7 @@ def get_sales_report(
     uid = emp['id']
     start, end = get_date_range(start_date, end_date)
     
-    # Consulta completa solicitada: Fecha | Cliente | Colaborador (es el usuario) | Comprobante | Item | Precio
+    # Consulta completa: Fecha | Cliente | Colaborador (Tú) | Comprobante | Item | Precio
     query = text("""
         SELECT v.fecha_venta, 
                c.razon_social_nombres, c.apellidos,
@@ -155,7 +162,7 @@ def get_sales_report(
     try:
         rows = db.execute(query, {"uid": uid, "start": start, "end": end}).fetchall()
         return [{
-            "date": row.fecha_venta.strftime("%d/%m/%Y %H:%M"),
+            "date": row.fecha_venta.strftime("%d/%m/%Y"),
             "client": f"{row.razon_social_nombres or ''} {row.apellidos or ''}".strip(),
             "receipt": f"{row.serie_comprobante or 'T'}-{row.numero_comprobante or '0'}",
             "item": row.item_nombre,
@@ -173,7 +180,7 @@ def get_financial_report(
     type: str, # 'commissions' | 'tips'
     start_date: Optional[date] = None, 
     end_date: Optional[date] = None, 
-    status: Optional[str] = None, # 'Pendiente' | 'Pagado' (opcional)
+    status: Optional[str] = None, # 'Pendiente' | 'Pagado'
     db: Session = Depends(get_db), 
     current_user: dict = Depends(get_current_user)
 ):
@@ -209,18 +216,12 @@ def get_financial_report(
             FROM propinas 
             WHERE empleado_id = :uid AND fecha_registro BETWEEN :start AND :end
         """
-        # Filtro manual de estado para propinas
-        # Si status='Pagado' -> entregado=true
-        # Si status='Pendiente' -> entregado=false
-        
         rows = db.execute(text(sql + " ORDER BY fecha_registro DESC"), {"uid": uid, "start": start, "end": end}).fetchall()
         for row in rows:
             is_paid = row.entregado_al_barbero
             state_str = "Pagado" if is_paid else "Pendiente"
             
-            # Filtro en Python si se solicitó un estado específico
-            if status and status != state_str:
-                continue
+            if status and status != state_str: continue # Filtro manual
                 
             data.append({
                 "date": row.fecha_registro.strftime("%d/%m/%Y"), 
@@ -247,8 +248,11 @@ def get_appointments(status: Optional[str] = None, db: Session = Depends(get_db)
         LEFT JOIN clientes c ON r.cliente_id = c.id
         WHERE r.empleado_id = :uid
     """
-    if status == 'Programada': sql += " AND r.estado = 'Programada'"
-    elif status: sql += " AND r.estado = :status"
+    if status == 'Programada': 
+        # CORRECCIÓN: Si es programada, solo mostrar futuras o de hoy
+        sql += " AND r.estado = 'Programada' AND r.fecha_hora_inicio >= (NOW() - INTERVAL '5 hours')"
+    elif status: 
+        sql += " AND r.estado = :status"
     
     sql += " ORDER BY r.fecha_hora_inicio ASC"
     
@@ -271,14 +275,11 @@ def get_appointments(status: Optional[str] = None, db: Session = Depends(get_db)
 async def complete_appointment(appt_id: int, file: UploadFile = File(...), db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
     emp = get_logged_employee(db, current_user)
     uid = emp['id']
-    
     os.makedirs("uploads/evidence", exist_ok=True)
     filename = f"evidencia_{appt_id}_{uuid.uuid4().hex[:8]}.{file.filename.split('.')[-1]}"
     with open(f"uploads/evidence/{filename}", "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
-    
     url = f"/static/evidence/{filename}"
-    
     try:
         stmt = text("UPDATE reservas SET estado = 'Finalizado', evidencia_url = :url WHERE id = :aid AND empleado_id = :uid")
         res = db.execute(stmt, {"url": url, "aid": appt_id, "uid": uid})
