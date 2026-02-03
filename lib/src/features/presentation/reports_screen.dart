@@ -1,182 +1,319 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
-// --- CONTROLADOR SIMPLE ---
-class ReportsController extends StatefulWidget {
-  const ReportsController({super.key});
+// IMPORTA TU PANTALLA DE REPORTES AQUÍ
+// Asegúrate de que la ruta sea correcta según donde guardaste el archivo anterior
+import 'package:barber_staff/src/features/reports/presentation/reports_screen.dart';
+
+import 'package:barber_staff/src/features/auth/presentation/login_screen.dart'; // Para el logout si es necesario
+
+class DashboardScreen extends StatefulWidget {
+  const DashboardScreen({super.key});
+
   @override
-  State<ReportsController> createState() => _ReportsControllerState();
+  State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
-class _ReportsControllerState extends State<ReportsController> with SingleTickerProviderStateMixin {
-  late TabController _tabController;
-  DateTimeRange? _selectedDateRange;
-  bool _isLoading = false;
+class _DashboardScreenState extends State<DashboardScreen> {
+  bool _isLoading = true;
   
-  List<dynamic> _sales = [];
-  List<dynamic> _commissions = [];
-  List<dynamic> _tips = [];
+  // Datos del Usuario
+  String _userName = "Cargando...";
+  String _period = "";
+  
+  // Métricas
+  double _production = 0.0;
+  double _commissionPending = 0.0;
+  
+  // Próxima Cita
+  Map<String, dynamic>? _nextAppt;
+
+  // URL de tu Backend (Railway)
+  final String _baseUrl = "https://celebrated-analysis-production.up.railway.app";
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
-    _loadData(); // Cargar mes actual por defecto
+    _loadDashboardData();
   }
 
-  Future<void> _loadData() async {
-    setState(() => _isLoading = true);
+  Future<void> _loadDashboardData() async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('token');
-    
-    // Fechas por defecto (Mes actual) o Selección
-    final now = DateTime.now();
-    final start = _selectedDateRange?.start ?? DateTime(now.year, now.month, 1);
-    final end = _selectedDateRange?.end ?? DateTime(now.year, now.month + 1, 0);
-    
-    final fmt = DateFormat('yyyy-MM-dd');
-    final query = "?start_date=${fmt.format(start)}&end_date=${fmt.format(end)}";
-    final baseUrl = "https://celebrated-analysis-production.up.railway.app"; // TU URL
+
+    if (token == null) {
+      _logout();
+      return;
+    }
 
     try {
-      // 1. VENTAS
-      final resSales = await http.get(Uri.parse('$baseUrl/staff/reports/sales$query'), headers: {'Authorization': 'Bearer $token'});
-      if (resSales.statusCode == 200) _sales = json.decode(resSales.body);
+      final response = await http.get(
+        Uri.parse('$_baseUrl/staff/dashboard'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
 
-      // 2. COMISIONES
-      final resComm = await http.get(Uri.parse('$baseUrl/staff/reports/financial?type=commissions&start_date=${fmt.format(start)}&end_date=${fmt.format(end)}'), headers: {'Authorization': 'Bearer $token'});
-      if (resComm.statusCode == 200) _commissions = json.decode(resComm.body);
-
-      // 3. PROPINAS
-      final resTips = await http.get(Uri.parse('$baseUrl/staff/reports/financial?type=tips&start_date=${fmt.format(start)}&end_date=${fmt.format(end)}'), headers: {'Authorization': 'Bearer $token'});
-      if (resTips.statusCode == 200) _tips = json.decode(resTips.body);
-
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        
+        setState(() {
+          _userName = data['user_name'] ?? "Colaborador";
+          _period = data['period'] ?? "";
+          
+          final metrics = data['metrics'];
+          _production = (metrics['total_production'] as num).toDouble();
+          _commissionPending = (metrics['total_commission_pending'] as num).toDouble();
+          
+          _nextAppt = data['next_appointment'];
+          _isLoading = false;
+        });
+      } else if (response.statusCode == 401) {
+        _logout();
+      } else {
+        setState(() => _isLoading = false);
+        print("Error en dashboard: ${response.statusCode}");
+      }
     } catch (e) {
-      print("Error cargando reportes: $e");
-    } finally {
       setState(() => _isLoading = false);
+      print("Error de conexión: $e");
     }
   }
 
-  Future<void> _pickDateRange() async {
-    final picked = await showDateRangePicker(
-      context: context,
-      firstDate: DateTime(2025),
-      lastDate: DateTime(2030),
-      initialDateRange: _selectedDateRange,
-      builder: (context, child) {
-        return Theme(
-          data: ThemeData.dark().copyWith(
-            colorScheme: const ColorScheme.dark(primary: Color(0xFFD4AF37), onPrimary: Colors.black),
-          ),
-          child: child!,
-        );
-      },
-    );
-    if (picked != null) {
-      setState(() => _selectedDateRange = picked);
-      _loadData();
+  Future<void> _logout() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.clear();
+    if (mounted) {
+      Navigator.pushReplacement(
+        context, 
+        MaterialPageRoute(builder: (_) => const LoginScreen())
+      );
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    // Colores del tema
+    const  Color kGold = Color(0xFFD4AF37);
+    const Color kDarkBg = Colors.black;
+    const Color kCardBg = Color(0xFF1E1E1E);
+
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: kDarkBg,
       appBar: AppBar(
-        title: const Text("Reportes y Finanzas", style: TextStyle(color: Colors.white)),
-        backgroundColor: Colors.black,
-        iconTheme: const IconThemeData(color: Color(0xFFD4AF37)),
-        bottom: TabBar(
-          controller: _tabController,
-          indicatorColor: const Color(0xFFD4AF37),
-          labelColor: const Color(0xFFD4AF37),
-          unselectedLabelColor: Colors.grey,
-          tabs: const [
-            Tab(text: "Ventas"),
-            Tab(text: "Comisiones"),
-            Tab(text: "Propinas"),
-          ],
-        ),
+        backgroundColor: kDarkBg,
+        elevation: 0,
+        title: const Text("Dashboard", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        centerTitle: true,
         actions: [
           IconButton(
-            icon: const Icon(Icons.calendar_today),
-            onPressed: _pickDateRange,
+            icon: const Icon(Icons.logout, color: Colors.white54),
+            onPressed: _logout,
           )
         ],
       ),
       body: _isLoading 
-        ? const Center(child: CircularProgressIndicator(color: Color(0xFFD4AF37)))
-        : TabBarView(
-            controller: _tabController,
-            children: [
-              _buildSalesList(),
-              _buildFinancialList(_commissions, true),
-              _buildFinancialList(_tips, false),
-            ],
+        ? const Center(child: CircularProgressIndicator(color: kGold))
+        : RefreshIndicator(
+            color: kGold,
+            onRefresh: _loadDashboardData,
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.all(20.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // 1. SALUDO
+                  Text(
+                    "Hola, $_userName",
+                    style: const TextStyle(color: kGold, fontSize: 22, fontWeight: FontWeight.bold),
+                  ),
+                  const Text(
+                    "Bienvenido de nuevo",
+                    style: TextStyle(color: Colors.grey, fontSize: 14),
+                  ),
+                  
+                  const SizedBox(height: 25),
+
+                  // 2. TÍTULO MÉTRICAS
+                  Text(
+                    "Mis Métricas ($_period)",
+                    style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 10),
+
+                  // 3. TARJETAS DE MÉTRICAS
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildMetricCard("Producción", _production, kCardBg, kGold),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _buildMetricCard("Comisión Pendiente", _commissionPending, kCardBg, Colors.white),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  // 4. NUEVO BOTÓN: VER REPORTES DETALLADOS
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.push(
+                          context, 
+                          MaterialPageRoute(builder: (_) => const ReportsScreen())
+                        );
+                      },
+                      icon: const Icon(Icons.bar_chart, color: kGold),
+                      label: const Text(
+                        "VER REPORTES DETALLADOS",
+                        style: TextStyle(color: kGold, fontWeight: FontWeight.bold, letterSpacing: 1.0),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: kGold, width: 1.5),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 30),
+
+                  // 5. SECCIÓN PRÓXIMA CITA
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        "Próxima Cita",
+                        style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                      ),
+                      TextButton(
+                        onPressed: () {
+                          // Aquí podrías llevar a una lista completa de citas
+                        },
+                        child: const Text("Ver Todo", style: TextStyle(color: kGold)),
+                      )
+                    ],
+                  ),
+
+                  const SizedBox(height: 10),
+
+                  // 6. CARD DE CITA
+                  _nextAppt == null 
+                    ? _buildNoAppointment(kCardBg)
+                    : _buildAppointmentCard(_nextAppt!, kCardBg, kGold),
+                    
+                  const SizedBox(height: 80), // Espacio para el FAB
+                ],
+              ),
+            ),
           ),
+      
+      // BOTÓN FLOTANTE (SUBIR EVIDENCIA)
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          // Acción para subir evidencia (cámara/galería)
+          // Idealmente deberías pasar el ID de la cita seleccionada
+        },
+        backgroundColor: kGold,
+        icon: const Icon(Icons.camera_alt, color: Colors.black),
+        label: const Text("Subir Evidencia", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+      ),
     );
   }
 
-  Widget _buildSalesList() {
-    if (_sales.isEmpty) return _emptyState();
-    return ListView.separated(
+  // --- WIDGETS AUXILIARES ---
+
+  Widget _buildMetricCard(String title, double amount, Color bg, Color amountColor) {
+    return Container(
       padding: const EdgeInsets.all(16),
-      itemCount: _sales.length,
-      separatorBuilder: (_, __) => const Divider(color: Colors.white10),
-      itemBuilder: (ctx, i) {
-        final item = _sales[i];
-        return ListTile(
-          contentPadding: EdgeInsets.zero,
-          title: Text(item['item'] ?? 'Venta', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-          subtitle: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text("${item['date']} • ${item['client']}", style: const TextStyle(color: Colors.grey, fontSize: 12)),
-              Text("Ticket: ${item['receipt']}", style: const TextStyle(color: Colors.grey, fontSize: 12)),
-            ],
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.attach_money, color: Colors.grey, size: 20),
+          const SizedBox(height: 8),
+          Text(title, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+          const SizedBox(height: 4),
+          Text(
+            "\$${amount.toStringAsFixed(0)}", // Sin decimales para estética limpia
+            style: TextStyle(color: amountColor, fontSize: 24, fontWeight: FontWeight.bold),
           ),
-          trailing: Text("\$${item['price']}", style: const TextStyle(color: Color(0xFFD4AF37), fontSize: 16, fontWeight: FontWeight.bold)),
-        );
-      },
+        ],
+      ),
     );
   }
 
-  Widget _buildFinancialList(List<dynamic> data, bool isCommission) {
-    if (data.isEmpty) return _emptyState();
-    return ListView.separated(
+  Widget _buildNoAppointment(Color bg) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: const Center(
+        child: Text(
+          "No tienes citas próximas",
+          style: TextStyle(color: Colors.grey),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAppointmentCard(Map<String, dynamic> appt, Color bg, Color accent) {
+    return Container(
+      width: double.infinity,
       padding: const EdgeInsets.all(16),
-      itemCount: data.length,
-      separatorBuilder: (_, __) => const Divider(color: Colors.white10),
-      itemBuilder: (ctx, i) {
-        final item = data[i];
-        final status = item['status'] ?? 'Pendiente';
-        final isPaid = status == 'Pagado' || status == 'Aprobado'; // Ajusta según tu BD
-        
-        return ListTile(
-          contentPadding: EdgeInsets.zero,
-          leading: Icon(
-            isCommission ? Icons.percent : Icons.savings, 
-            color: isPaid ? Colors.green : Colors.orange
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        children: [
+          // Barra lateral de color
+          Container(
+            width: 4,
+            height: 50,
+            decoration: BoxDecoration(
+              color: accent,
+              borderRadius: BorderRadius.circular(2),
+            ),
           ),
-          title: Text(item['concept'] ?? '', style: const TextStyle(color: Colors.white)),
-          subtitle: Text(item['date'] ?? '', style: const TextStyle(color: Colors.grey)),
-          trailing: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text("\$${item['amount']}", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-              Text(status, style: TextStyle(color: isPaid ? Colors.green : Colors.orange, fontSize: 10)),
-            ],
+          const SizedBox(width: 16),
+          // Info Cita
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  appt['time'] ?? "--:--",
+                  style: TextStyle(color: accent, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  appt['client'] ?? "Cliente",
+                  style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                Text(
+                  appt['service'] ?? "Servicio",
+                  style: const TextStyle(color: Colors.grey, fontSize: 12),
+                ),
+              ],
+            ),
           ),
-        );
-      },
+          const Icon(Icons.chevron_right, color: Colors.grey),
+        ],
+      ),
     );
   }
-
-  Widget _emptyState() => const Center(child: Text("No hay datos en este periodo", style: TextStyle(color: Colors.grey)));
 }
