@@ -152,11 +152,11 @@ def get_sales_report(
                CASE WHEN vi.servicio_id IS NOT NULL THEN 'Servicio' ELSE 'Producto' END as tipo
         FROM venta_items vi
         JOIN ventas v ON vi.venta_id = v.id
-        LEFT JOIN clientes c ON v.cliente_facturacion_id = c.id
+        LEFT JOIN clientes c ON v.cliente_id = c.id
         LEFT JOIN servicios s ON vi.servicio_id = s.id
         LEFT JOIN productos p ON vi.producto_id = p.id
         WHERE v.empleado_id = :uid 
-        AND v.fecha_venta BETWEEN :start AND :end
+        AND v.fecha_venta::DATE BETWEEN :start AND :end
         ORDER BY v.fecha_venta DESC
     """)
     try:
@@ -196,7 +196,7 @@ def get_financial_report(
             FROM comisiones c
             LEFT JOIN venta_items vi ON c.venta_item_id = vi.id
             LEFT JOIN servicios s ON vi.servicio_id = s.id
-            WHERE c.empleado_id = :uid AND c.fecha_generacion BETWEEN :start AND :end
+            WHERE c.empleado_id = :uid AND c.fecha_generacion::DATE BETWEEN :start AND :end
         """
         if status: sql += " AND c.estado = :status"
         sql += " ORDER BY c.fecha_generacion DESC"
@@ -214,7 +214,7 @@ def get_financial_report(
         sql = """
             SELECT fecha_registro, monto, metodo_pago, entregado_al_barbero 
             FROM propinas 
-            WHERE empleado_id = :uid AND fecha_registro BETWEEN :start AND :end
+            WHERE empleado_id = :uid AND fecha_registro::DATE BETWEEN :start AND :end
         """
         rows = db.execute(text(sql + " ORDER BY fecha_registro DESC"), {"uid": uid, "start": start, "end": end}).fetchall()
         for row in rows:
