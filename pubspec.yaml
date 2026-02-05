@@ -34,6 +34,7 @@ dependencies:
   
   # Networking
   dio: ^5.9.0
+  http: ^1.2.0
   
   # State Management
   flutter_riverpod: ^2.4.9
@@ -78,3 +79,4 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
