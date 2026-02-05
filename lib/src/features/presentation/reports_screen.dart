@@ -1,317 +1,340 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
-// IMPORTA TU PANTALLA DE REPORTES AQUÍ
-// Asegúrate de que la ruta sea correcta según donde guardaste el archivo anterior
-import 'package:barber_staff/src/features/reports/presentation/reports_screen.dart';
-
-import 'package:barber_staff/src/features/auth/presentation/login_screen.dart'; // Para el logout si es necesario
-
-class DashboardScreen extends StatefulWidget {
-  const DashboardScreen({super.key});
+class ReportsScreen extends StatefulWidget {
+  const ReportsScreen({super.key});
 
   @override
-  State<DashboardScreen> createState() => _DashboardScreenState();
+  State<ReportsScreen> createState() => _ReportsScreenState();
 }
 
-class _DashboardScreenState extends State<DashboardScreen> {
-  bool _isLoading = true;
+class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+  DateTimeRange? _selectedDateRange;
+  bool _isLoading = false;
   
-  // Datos del Usuario
-  String _userName = "Cargando...";
-  String _period = "";
-  
-  // Métricas
-  double _production = 0.0;
-  double _commissionPending = 0.0;
-  
-  // Próxima Cita
-  Map<String, dynamic>? _nextAppt;
+  // Listas de Datos
+  List<dynamic> _sales = [];
+  List<dynamic> _commissions = [];
+  List<dynamic> _tips = [];
 
-  // URL de tu Backend (Railway)
-  final String _baseUrl = "https://celebrated-analysis-production.up.railway.app";
+  // Totales
+  double _totalSales = 0.0;
+  double _totalCommissions = 0.0;
+  double _totalTips = 0.0;
+
+  // TU URL DE RAILWAY
+  final String baseUrl = "https://celebrated-analysis-production.up.railway.app"; 
+
+  // Colores del Tema
+  final Color kGold = const Color(0xFFD4AF37);
+  final Color kDarkBg = Colors.black;
+  final Color kCardBg = const Color(0xFF1E1E1E);
 
   @override
   void initState() {
     super.initState();
-    _loadDashboardData();
+    _tabController = TabController(length: 3, vsync: this);
+    
+    // Configurar fecha inicial: Mes Actual (del 1 al último día)
+    final now = DateTime.now();
+    _selectedDateRange = DateTimeRange(
+      start: DateTime(now.year, now.month, 1),
+      end: DateTime(now.year, now.month + 1, 0) // El día 0 del mes siguiente es el último del actual
+    );
+    
+    _loadAllData();
   }
 
-  Future<void> _loadDashboardData() async {
+  // Carga todos los datos del Backend
+  Future<void> _loadAllData() async {
+    setState(() => _isLoading = true);
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('token');
 
-    if (token == null) {
-      _logout();
-      return;
-    }
+    if (token == null) return;
+
+    final fmt = DateFormat('yyyy-MM-dd');
+    final start = fmt.format(_selectedDateRange!.start);
+    final end = fmt.format(_selectedDateRange!.end);
+    
+    final query = "?start_date=$start&end_date=$end";
+    final headers = {'Authorization': 'Bearer $token'};
 
     try {
-      final response = await http.get(
-        Uri.parse('$_baseUrl/staff/dashboard'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-      );
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        
+      // 1. VENTAS
+      final resSales = await http.get(Uri.parse('$baseUrl/staff/reports/sales$query'), headers: headers);
+      if (resSales.statusCode == 200) {
+        final List<dynamic> data = json.decode(resSales.body);
         setState(() {
-          _userName = data['user_name'] ?? "Colaborador";
-          _period = data['period'] ?? "";
-          
-          final metrics = data['metrics'];
-          _production = (metrics['total_production'] as num).toDouble();
-          _commissionPending = (metrics['total_commission_pending'] as num).toDouble();
-          
-          _nextAppt = data['next_appointment'];
-          _isLoading = false;
+          _sales = data;
+          _totalSales = data.fold(0.0, (sum, item) => sum + (item['price'] as num).toDouble());
         });
-      } else if (response.statusCode == 401) {
-        _logout();
-      } else {
-        setState(() => _isLoading = false);
-        print("Error en dashboard: ${response.statusCode}");
       }
+
+      // 2. COMISIONES
+      final resComm = await http.get(Uri.parse('$baseUrl/staff/reports/financial?type=commissions&start_date=$start&end_date=$end'), headers: headers);
+      if (resComm.statusCode == 200) {
+        final List<dynamic> data = json.decode(resComm.body);
+        setState(() {
+          _commissions = data;
+          _totalCommissions = data.fold(0.0, (sum, item) => sum + (item['amount'] as num).toDouble());
+        });
+      }
+
+      // 3. PROPINAS
+      final resTips = await http.get(Uri.parse('$baseUrl/staff/reports/financial?type=tips&start_date=$start&end_date=$end'), headers: headers);
+      if (resTips.statusCode == 200) {
+        final List<dynamic> data = json.decode(resTips.body);
+        setState(() {
+          _tips = data;
+          _totalTips = data.fold(0.0, (sum, item) => sum + (item['amount'] as num).toDouble());
+        });
+      }
+
     } catch (e) {
+      print("Error cargando reportes: $e");
+    } finally {
       setState(() => _isLoading = false);
-      print("Error de conexión: $e");
     }
   }
 
-  Future<void> _logout() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.clear();
-    if (mounted) {
-      Navigator.pushReplacement(
-        context, 
-        MaterialPageRoute(builder: (_) => const LoginScreen())
-      );
+  // Selector de Fechas
+  Future<void> _pickDateRange() async {
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2025),
+      lastDate: DateTime(2030),
+      initialDateRange: _selectedDateRange,
+      builder: (context, child) {
+        return Theme(
+          data: ThemeData.dark().copyWith(
+            colorScheme: ColorScheme.dark(
+              primary: kGold, 
+              onPrimary: Colors.black, 
+              surface: kCardBg
+            ),
+            scaffoldBackgroundColor: kDarkBg,
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null) {
+      setState(() => _selectedDateRange = picked);
+      _loadAllData();
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    // Colores del tema
-    const  Color kGold = Color(0xFFD4AF37);
-    const Color kDarkBg = Colors.black;
-    const Color kCardBg = Color(0xFF1E1E1E);
-
     return Scaffold(
       backgroundColor: kDarkBg,
       appBar: AppBar(
+        title: const Text("Reportes Detallados", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         backgroundColor: kDarkBg,
+        iconTheme: IconThemeData(color: kGold),
         elevation: 0,
-        title: const Text("Dashboard", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        centerTitle: true,
         actions: [
           IconButton(
-            icon: const Icon(Icons.logout, color: Colors.white54),
-            onPressed: _logout,
-          )
-        ],
-      ),
-      body: _isLoading 
-        ? const Center(child: CircularProgressIndicator(color: kGold))
-        : RefreshIndicator(
+            icon: const Icon(Icons.calendar_month),
             color: kGold,
-            onRefresh: _loadDashboardData,
-            child: SingleChildScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.all(20.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // 1. SALUDO
-                  Text(
-                    "Hola, $_userName",
-                    style: const TextStyle(color: kGold, fontSize: 22, fontWeight: FontWeight.bold),
-                  ),
-                  const Text(
-                    "Bienvenido de nuevo",
-                    style: TextStyle(color: Colors.grey, fontSize: 14),
-                  ),
-                  
-                  const SizedBox(height: 25),
-
-                  // 2. TÍTULO MÉTRICAS
-                  Text(
-                    "Mis Métricas ($_period)",
-                    style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 10),
-
-                  // 3. TARJETAS DE MÉTRICAS
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _buildMetricCard("Producción", _production, kCardBg, kGold),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _buildMetricCard("Comisión Pendiente", _commissionPending, kCardBg, Colors.white),
-                      ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 20),
-
-                  // 4. NUEVO BOTÓN: VER REPORTES DETALLADOS
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed: () {
-                        Navigator.push(
-                          context, 
-                          MaterialPageRoute(builder: (_) => const ReportsScreen())
-                        );
-                      },
-                      icon: const Icon(Icons.bar_chart, color: kGold),
-                      label: const Text(
-                        "VER REPORTES DETALLADOS",
-                        style: TextStyle(color: kGold, fontWeight: FontWeight.bold, letterSpacing: 1.0),
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: kGold, width: 1.5),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 30),
-
-                  // 5. SECCIÓN PRÓXIMA CITA
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        "Próxima Cita",
-                        style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-                      ),
-                      TextButton(
-                        onPressed: () {
-                          // Aquí podrías llevar a una lista completa de citas
-                        },
-                        child: const Text("Ver Todo", style: TextStyle(color: kGold)),
-                      )
-                    ],
-                  ),
-
-                  const SizedBox(height: 10),
-
-                  // 6. CARD DE CITA
-                  _nextAppt == null 
-                    ? _buildNoAppointment(kCardBg)
-                    : _buildAppointmentCard(_nextAppt!, kCardBg, kGold),
-                    
-                  const SizedBox(height: 80), // Espacio para el FAB
-                ],
-              ),
-            ),
-          ),
-      
-      // BOTÓN FLOTANTE (SUBIR EVIDENCIA)
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          // Acción para subir evidencia (cámara/galería)
-          // Idealmente deberías pasar el ID de la cita seleccionada
-        },
-        backgroundColor: kGold,
-        icon: const Icon(Icons.camera_alt, color: Colors.black),
-        label: const Text("Subir Evidencia", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-      ),
-    );
-  }
-
-  // --- WIDGETS AUXILIARES ---
-
-  Widget _buildMetricCard(String title, double amount, Color bg, Color amountColor) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Icon(Icons.attach_money, color: Colors.grey, size: 20),
-          const SizedBox(height: 8),
-          Text(title, style: const TextStyle(color: Colors.grey, fontSize: 12)),
-          const SizedBox(height: 4),
-          Text(
-            "\$${amount.toStringAsFixed(0)}", // Sin decimales para estética limpia
-            style: TextStyle(color: amountColor, fontSize: 24, fontWeight: FontWeight.bold),
+            onPressed: _pickDateRange,
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildNoAppointment(Color bg) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: const Center(
-        child: Text(
-          "No tienes citas próximas",
-          style: TextStyle(color: Colors.grey),
+        bottom: TabBar(
+          controller: _tabController,
+          indicatorColor: kGold,
+          labelColor: kGold,
+          unselectedLabelColor: Colors.grey,
+          labelStyle: const TextStyle(fontWeight: FontWeight.bold),
+          tabs: const [
+            Tab(text: "Ventas"),
+            Tab(text: "Comisiones"),
+            Tab(text: "Propinas"),
+          ],
         ),
       ),
+      body: _isLoading 
+        ? Center(child: CircularProgressIndicator(color: kGold))
+        : TabBarView(
+            controller: _tabController,
+            children: [
+              _buildList(_sales, _totalSales, isSale: true),
+              _buildList(_commissions, _totalCommissions, isSale: false),
+              _buildList(_tips, _totalTips, isSale: false),
+            ],
+          ),
     );
   }
 
-  Widget _buildAppointmentCard(Map<String, dynamic> appt, Color bg, Color accent) {
+  // Constructor de Listas
+  Widget _buildList(List<dynamic> data, double total, {required bool isSale}) {
+    // Si no hay datos
+    if (data.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.folder_off, color: Colors.grey.withOpacity(0.5), size: 60),
+            const SizedBox(height: 10),
+            const Text("Sin movimientos en este periodo", style: TextStyle(color: Colors.grey)),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      children: [
+        // Cabecera de Totales
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          color: kCardBg,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                "TOTAL PERIODO (${DateFormat('MMM').format(_selectedDateRange!.start)})", 
+                style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.bold, fontSize: 12)
+              ),
+              Text(
+                "\$${total.toStringAsFixed(2)}", 
+                style: TextStyle(color: kGold, fontSize: 22, fontWeight: FontWeight.bold)
+              ),
+            ],
+          ),
+        ),
+        
+        // Lista de Items
+        Expanded(
+          child: ListView.separated(
+            padding: const EdgeInsets.all(16),
+            itemCount: data.length,
+            separatorBuilder: (_, __) => Divider(color: Colors.white.withOpacity(0.1)),
+            itemBuilder: (ctx, i) {
+              final item = data[i];
+              return isSale ? _saleTile(item) : _financeTile(item);
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  // Diseño de Fila para VENTAS
+  Widget _saleTile(dynamic item) {
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(16),
-      ),
+      padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Barra lateral de color
+          // Icono
           Container(
-            width: 4,
-            height: 50,
+            padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: accent,
-              borderRadius: BorderRadius.circular(2),
+              color: kCardBg,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(
+              item['type'] == 'Servicio' ? Icons.content_cut : Icons.shopping_bag, 
+              color: Colors.white, size: 20
             ),
           ),
-          const SizedBox(width: 16),
-          // Info Cita
+          const SizedBox(width: 12),
+          // Info Central
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  appt['time'] ?? "--:--",
-                  style: TextStyle(color: accent, fontWeight: FontWeight.bold),
+                  item['item'] ?? 'Ítem desconocido',
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  appt['client'] ?? "Cliente",
-                  style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                  "${item['date']} • ${item['client']}",
+                  style: TextStyle(color: Colors.grey[400], fontSize: 12),
                 ),
                 Text(
-                  appt['service'] ?? "Servicio",
+                  "Ticket: ${item['receipt']}",
+                  style: const TextStyle(color: Colors.grey, fontSize: 11),
+                ),
+              ],
+            ),
+          ),
+          // Precio
+          Text(
+            "\$${item['price']}",
+            style: TextStyle(color: kGold, fontSize: 16, fontWeight: FontWeight.bold),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Diseño de Fila para COMISIONES y PROPINAS
+  Widget _financeTile(dynamic item) {
+    final status = item['status'] ?? 'Pendiente';
+    final isPaid = status == 'Pagado' || status == 'Aprobado' || status == 'Entregado';
+    
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          // Icono Estado
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: kCardBg,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: isPaid ? Colors.green.withOpacity(0.3) : Colors.orange.withOpacity(0.3))
+            ),
+            child: Icon(
+              isPaid ? Icons.check_circle_outline : Icons.watch_later_outlined,
+              color: isPaid ? Colors.green : Colors.orange, size: 20
+            ),
+          ),
+          const SizedBox(width: 12),
+          // Info
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item['concept'] ?? 'Concepto',
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  item['date'] ?? '',
                   style: const TextStyle(color: Colors.grey, fontSize: 12),
                 ),
               ],
             ),
           ),
-          const Icon(Icons.chevron_right, color: Colors.grey),
+          // Monto
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                "\$${item['amount']}",
+                style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                status.toString().toUpperCase(),
+                style: TextStyle(
+                  color: isPaid ? Colors.green : Colors.orange, 
+                  fontSize: 10, 
+                  fontWeight: FontWeight.bold
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );
