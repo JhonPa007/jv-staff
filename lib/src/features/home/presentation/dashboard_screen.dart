@@ -6,6 +6,7 @@ import 'package:app_jv_staff/src/features/home/presentation/dashboard_controller
 import 'package:app_jv_staff/src/features/appointments/presentation/appointment_detail_screen.dart';
 import 'package:app_jv_staff/src/features/appointments/domain/models/appointment_model.dart';
 import 'package:app_jv_staff/src/features/media/presentation/upload_evidence_screen.dart';
+import 'package:app_jv_staff/src/features/reports/presentation/reports_screen.dart';
 
 class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
@@ -95,6 +96,26 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   const SizedBox(width: 15),
                   Expanded(child: _buildMetricCard("Comisión Pendiente", "\$${data.totalCommissionPending}", false)),
                 ],
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const ReportsScreen()),
+                    );
+                  },
+                  icon: const Icon(Icons.bar_chart, color: Color(0xFFD4AF37)),
+                  label: const Text('VER REPORTES DETALLADOS',
+                      style: TextStyle(color: Color(0xFFD4AF37), fontWeight: FontWeight.bold)),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: Color(0xFFD4AF37), width: 1.5),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    padding: const EdgeInsets.symmetric(vertical: 15),
+                  ),
+                ),
               ),
               const SizedBox(height: 30),
 
