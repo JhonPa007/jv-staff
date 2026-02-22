@@ -23,7 +23,7 @@ FROM nginx:alpine
 COPY --from=build /app/build/web /usr/share/nginx/html
 
 # Copiamos la plantilla de configuración de Nginx
-COPY nginx.template.conf /etc/nginx/templates/default.conf.template
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# Arrancamos Nginx usando envsubst para reemplazar la variable PORT proporcionada por Railway
-CMD ["/bin/sh" , "-c" , "envsubst '$PORT' < /etc/nginx/templates/default.conf.template > /etc/nginx/conf.d/default.conf && nginx -g 'daemon off;'"]
+# Arrancamos Nginx usando sed para reemplazar el puerto dinámico garantizando que funcione el port binding
+CMD /bin/sh -c "port=\${PORT:-8080} && sed -i -e \"s/__PORT__/\$port/g\" /etc/nginx/conf.d/default.conf && nginx -g 'daemon off;'"
