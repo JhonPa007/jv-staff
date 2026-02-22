@@ -22,8 +22,8 @@ FROM nginx:alpine
 # Copiamos los archivos construidos
 COPY --from=build /app/build/web /usr/share/nginx/html
 
-# Exponemos el puerto 80
-EXPOSE 80
+# Copiamos la plantilla de configuración de Nginx
+COPY nginx.template.conf /etc/nginx/templates/default.conf.template
 
-# Arrancamos Nginx
-CMD ["nginx", "-g", "daemon off;"]
+# Arrancamos Nginx usando envsubst para reemplazar la variable PORT proporcionada por Railway
+CMD ["/bin/sh" , "-c" , "envsubst '$PORT' < /etc/nginx/templates/default.conf.template > /etc/nginx/conf.d/default.conf && nginx -g 'daemon off;'"]
